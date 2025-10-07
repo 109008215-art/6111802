@@ -1,0 +1,488 @@
+<!DOCTYPE html>
+<html lang="zh-Hant">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>開心農場</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Noto+Sans+TC:wght@400;700&display=swap" rel="stylesheet">
+    <style>
+        body {
+            font-family: 'Noto Sans TC', sans-serif;
+            touch-action: manipulation;
+            overflow: hidden;
+            transition: background 1s ease-in-out;
+        }
+        /* Seasonal Backgrounds */
+        .season-spring { background: linear-gradient(to bottom, #87CEEB, #90EE90); }
+        .season-summer { background: linear-gradient(to bottom, #4682B4, #3CB371); }
+        .season-autumn { background: linear-gradient(to bottom, #FF8C00, #CD853F); }
+        .season-winter { background: linear-gradient(to bottom, #B0C4DE, #E6E6FA); }
+        
+        .farm-plot, .ranch-plot {
+            transition: transform 0.2s ease-out, box-shadow 0.2s ease-out, background-color 0.5s;
+            background-size: cover;
+        }
+        .farm-plot.dry { background-color: #A16207; }
+        .farm-plot.wet { background-color: #5c3c0b; }
+        .ranch-plot { background-color: #22c55e; }
+
+        .farm-plot:hover, .ranch-plot:hover {
+            transform: scale(1.05);
+            box-shadow: 0 0 15px rgba(255, 255, 255, 0.5);
+        }
+
+        .tool-button.selected, .view-button.selected {
+            transform: scale(1.1);
+            box-shadow: 0 0 15px rgba(250, 204, 21, 0.8);
+            border-color: #fde047;
+            background-color: #ca8a04;
+        }
+        .plot-text {
+            font-size: clamp(1.5rem, 5vw, 2.25rem);
+            text-shadow: 0 2px 4px rgba(0,0,0,0.5);
+        }
+        .speech-bubble {
+            position: relative;
+            filter: drop-shadow(0 4px 6px rgba(0,0,0,0.2));
+        }
+        .speech-bubble::after {
+            content: '';
+            position: absolute;
+            left: 50%;
+            bottom: -15px;
+            transform: translateX(-50%);
+            border-width: 15px 15px 0 15px;
+            border-style: solid;
+            border-color: var(--bubble-tail-color, #f0fdf4) transparent transparent transparent;
+        }
+        
+        @keyframes character-idle { 0%, 100% { transform: translateY(0) rotate(-1deg); } 50% { transform: translateY(-5px) rotate(1deg); } }
+        #character { animation: character-idle 4s ease-in-out infinite; }
+
+        @keyframes float-up { from { opacity: 1; transform: translateY(0); } to { opacity: 0; transform: translateY(-50px); } }
+        .floating-text {
+            position: absolute;
+            animation: float-up 1.5s ease-out forwards;
+            font-size: 1.25rem; font-weight: bold; color: #facc15;
+            text-shadow: 0 1px 2px rgba(0,0,0,0.8); pointer-events: none;
+        }
+        .view-button {
+            background-color: rgba(0,0,0,0.3);
+            border: 1px solid rgba(255,255,255,0.2);
+        }
+    </style>
+</head>
+<body class="flex items-center justify-center min-h-screen p-2 sm:p-4 season-spring">
+
+    <div id="game-container" class="w-full max-w-7xl mx-auto bg-black/20 backdrop-blur-sm rounded-2xl shadow-2xl p-4 text-white border-2 border-white/30 grid grid-cols-1 lg:grid-cols-5 gap-4">
+        
+        <!-- Left Panel -->
+        <div class="lg:col-span-1 flex flex-col gap-4">
+            <header class="bg-black/20 p-3 rounded-lg border border-white/20">
+                <h1 class="text-2xl font-bold text-center">🌻 開心農場 🌻</h1>
+                <div class="flex justify-between items-center mt-2 text-lg">
+                    <div id="day-display" class="font-bold">☀️ 第 1 天</div>
+                    <div class="bg-slate-800/50 rounded-lg p-2 px-4">
+                        <span class="font-bold text-yellow-300">💰</span>
+                        <span id="money" class="font-bold text-2xl ml-2">100</span>
+                    </div>
+                </div>
+                <div id="view-switcher" class="mt-3 grid grid-cols-2 gap-2">
+                    <button id="view-farm-btn" class="view-button p-2 rounded-lg transition-colors font-bold">農場</button>
+                    <button id="view-ranch-btn" class="view-button p-2 rounded-lg transition-colors font-bold">牧場</button>
+                </div>
+            </header>
+            
+            <div class="bg-black/20 p-3 rounded-lg border border-white/20 flex-grow">
+                 <div id="character" class="text-8xl text-center transition-transform duration-200">👩‍🌾</div>
+                 <div id="status-message" class="speech-bubble mt-4 text-center bg-lime-50 text-lime-900 p-3 rounded-lg font-bold">今天想種些什麼呢？</div>
+            </div>
+
+            <div class="bg-black/20 p-3 rounded-lg border border-white/20">
+                <h2 class="text-xl font-bold mb-2 text-center text-yellow-200">工具箱</h2>
+                <div id="tool-selection" class="flex justify-center gap-4">
+                     <button class="tool-button text-4xl p-3 bg-sky-800/80 rounded-lg border-2 border-sky-600 hover:bg-sky-700 transition-all" data-tool="water">💧</button>
+                </div>
+            </div>
+        </div>
+
+        <!-- Middle Panel -->
+        <div class="lg:col-span-3 relative aspect-square">
+            <div id="farm-grid" class="absolute inset-0 grid grid-cols-4 gap-2 bg-yellow-900/50 p-2 rounded-lg shadow-inner"></div>
+            <div id="ranch-grid" class="absolute inset-0 grid grid-cols-4 grid-rows-2 gap-2 bg-green-800/50 p-2 rounded-lg shadow-inner"></div>
+        </div>
+        
+        <!-- Right Panel -->
+        <div class="lg:col-span-1 flex flex-col gap-4">
+            <div class="bg-black/20 p-3 rounded-lg border border-white/20">
+                <h2 class="text-xl font-bold mb-2 text-center text-yellow-200">種子商店</h2>
+                <div id="seed-selection" class="grid grid-cols-2 gap-2"></div>
+            </div>
+            <div class="bg-black/20 p-3 rounded-lg border border-white/20">
+                <h2 class="text-xl font-bold mb-2 text-center text-yellow-200">動物商店</h2>
+                <div id="animal-selection" class="grid grid-cols-2 gap-2"></div>
+            </div>
+
+            <div class="bg-black/20 p-3 rounded-lg border border-white/20">
+                <h2 class="text-xl font-bold mb-2 text-center text-yellow-200">我的庫存</h2>
+                <div id="inventory-display" class="grid grid-cols-2 gap-2"></div>
+            </div>
+            
+            <div class="bg-black/20 p-3 rounded-lg border border-white/20 flex-grow">
+                <h2 class="text-xl font-bold mb-2 text-center text-yellow-200">每日市場</h2>
+                <div id="market-display" class="space-y-2"></div>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        const elements = {
+            farmGrid: document.getElementById('farm-grid'),
+            ranchGrid: document.getElementById('ranch-grid'),
+            moneyDisplay: document.getElementById('money'),
+            statusMessage: document.getElementById('status-message'),
+            seedSelectionContainer: document.getElementById('seed-selection'),
+            animalSelectionContainer: document.getElementById('animal-selection'),
+            character: document.getElementById('character'),
+            inventoryDisplay: document.getElementById('inventory-display'),
+            marketDisplay: document.getElementById('market-display'),
+            dayDisplay: document.getElementById('day-display'),
+            body: document.body
+        };
+
+        const FARM_GRID_SIZE = 16;
+        const RANCH_GRID_SIZE = 8;
+        const DAY_DURATION_MS = 60000;
+        let audioCtx;
+
+        const CROPS = {
+            carrot: { name: '蘿蔔', icon: '🥕', stages: ['🌱', '🌿', '🥕'], growTime: 10, cost: 5, baseValue: 15 },
+            tomato: { name: '番茄', icon: '🍅', stages: ['🌱', '🌿', '🍅'], growTime: 20, cost: 15, baseValue: 40 },
+            corn: { name: '玉米', icon: '🌽', stages: ['🌱', '🌿', '🌽'], growTime: 30, cost: 25, baseValue: 70 },
+            sunflower: { name: '向日葵', icon: '🌻', stages: ['🌱', '🌿', '🌻'], growTime: 45, cost: 40, baseValue: 120 }
+        };
+        const ANIMALS = {
+            chicken: { name: '雞', icon: '🐔', cost: 50, product: 'egg' },
+            cow: { name: '牛', icon: '🐮', cost: 200, product: 'milk' }
+        };
+        const PRODUCTS = {
+            ...CROPS,
+            egg: { name: '雞蛋', icon: '🥚', baseValue: 8 },
+            milk: { name: '牛奶', icon: '🥛', baseValue: 25 }
+        };
+        const PRODUCT_KEYS = Object.keys(PRODUCTS);
+
+        let gameState = {
+            money: 100,
+            plots: Array(FARM_GRID_SIZE).fill(null),
+            ranchPlots: Array(RANCH_GRID_SIZE).fill(null),
+            currentTool: 'seed',
+            currentView: 'farm',
+            selectedSeed: 'carrot',
+            selectedAnimal: null,
+            inventory: PRODUCT_KEYS.reduce((acc, key) => ({...acc, [key]: 0}), {}),
+            day: 1,
+            marketPrices: PRODUCT_KEYS.reduce((acc, key) => ({...acc, [key]: PRODUCTS[key].baseValue || 0 }), {}),
+        };
+
+        // --- SOUNDS ---
+        function initAudio() {
+            if (!audioCtx) audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+        }
+        function playSound(type, freq1, freq2) {
+            if (!audioCtx) return;
+            const osc = audioCtx.createOscillator();
+            const gain = audioCtx.createGain();
+            osc.connect(gain); gain.connect(audioCtx.destination);
+            gain.gain.setValueAtTime(0, audioCtx.currentTime);
+            gain.gain.linearRampToValueAtTime(0.2, audioCtx.currentTime + 0.01);
+            osc.type = type; osc.frequency.setValueAtTime(freq1, audioCtx.currentTime);
+            if(freq2) setTimeout(() => osc.frequency.setValueAtTime(freq2, audioCtx.currentTime), 80);
+            osc.start();
+            gain.gain.exponentialRampToValueAtTime(0.00001, audioCtx.currentTime + 0.5);
+            osc.stop(audioCtx.currentTime + 0.5);
+        }
+        const SOUNDS = {
+            plant: () => playSound('sine', 261, 330), harvest: () => playSound('square', 392),
+            cash: () => playSound('triangle', 523, 698), error: () => playSound('sawtooth', 130),
+            water: () => playSound('sine', 600, 800), newday: () => playSound('triangle', 440, 550),
+            animal: () => playSound('square', 200, 250)
+        };
+
+        function saveGame() { localStorage.setItem('farmGameState_v3', JSON.stringify(gameState)); }
+        function loadGame() {
+            const savedState = localStorage.getItem('farmGameState_v3');
+            if (savedState) gameState = JSON.parse(savedState);
+        }
+
+        function init() {
+            loadGame();
+            
+            for (let i = 0; i < FARM_GRID_SIZE; i++) {
+                const el = document.createElement('div');
+                el.className = 'farm-plot w-full h-full rounded-lg cursor-pointer flex items-center justify-center select-none';
+                el.dataset.index = i; el.addEventListener('click', handlePlotClick);
+                el.innerHTML = '<span class="plot-text"></span>';
+                elements.farmGrid.appendChild(el);
+            }
+            for (let i = 0; i < RANCH_GRID_SIZE; i++) {
+                const el = document.createElement('div');
+                el.className = 'ranch-plot w-full h-full rounded-lg cursor-pointer flex items-center justify-center select-none';
+                el.dataset.index = i; el.addEventListener('click', handleRanchPlotClick);
+                el.innerHTML = '<span class="plot-text"></span>';
+                elements.ranchGrid.appendChild(el);
+            }
+            
+            Object.keys(CROPS).forEach(key => {
+                const item = CROPS[key];
+                const btn = document.createElement('button');
+                btn.className = 'tool-button w-full p-2 bg-lime-800/80 rounded-lg font-bold border-2 border-lime-600 hover:bg-lime-700 transition-all flex flex-col items-center';
+                btn.dataset.tool = 'seed'; btn.dataset.key = key;
+                btn.innerHTML = `<span class="text-2xl">${item.icon}</span><span>${item.name}</span><span class="text-xs text-yellow-300">($${item.cost})</span>`;
+                elements.seedSelectionContainer.appendChild(btn);
+            });
+            Object.keys(ANIMALS).forEach(key => {
+                const item = ANIMALS[key];
+                const btn = document.createElement('button');
+                btn.className = 'tool-button w-full p-2 bg-orange-800/80 rounded-lg font-bold border-2 border-orange-600 hover:bg-orange-700 transition-all flex flex-col items-center';
+                btn.dataset.tool = 'animal'; btn.dataset.key = key;
+                btn.innerHTML = `<span class="text-2xl">${item.icon}</span><span>${item.name}</span><span class="text-xs text-yellow-300">($${item.cost})</span>`;
+                elements.animalSelectionContainer.appendChild(btn);
+            });
+
+            document.querySelectorAll('.tool-button, #tool-selection button').forEach(b => b.addEventListener('click', handleToolSelection));
+            document.getElementById('view-farm-btn').addEventListener('click', () => handleViewSwitch('farm'));
+            document.getElementById('view-ranch-btn').addEventListener('click', () => handleViewSwitch('ranch'));
+            document.body.addEventListener('click', initAudio, { once: true });
+            
+            setInterval(gameLoop, 500); setInterval(advanceDay, DAY_DURATION_MS);
+            
+            updateMarketPrices(); updateSeason(); updateAllUI();
+        }
+
+        function advanceDay() {
+            gameState.day++;
+            gameState.plots.forEach(p => { if (p) p.watered = false; });
+            
+            gameState.ranchPlots.forEach(animalType => {
+                if (animalType) {
+                    const product = ANIMALS[animalType].product;
+                    gameState.inventory[product]++;
+                }
+            });
+
+            if (Math.random() < 0.2) {
+                gameState.plots.forEach(p => { if (p) p.watered = true; });
+                updateStatus('下雨了！所有土地都澆過水了！', 'info');
+            }
+
+            updateMarketPrices(); updateSeason(); updateAllUI(); SOUNDS.newday();
+        }
+
+        function updateSeason() {
+            const seasons = ['spring', 'summer', 'autumn', 'winter'];
+            const currentSeason = seasons[Math.floor((gameState.day - 1) / 5) % seasons.length];
+            elements.body.className = elements.body.className.replace(/season-\w+/, `season-${currentSeason}`);
+        }
+
+        function updateMarketPrices() {
+            PRODUCT_KEYS.forEach(key => {
+                const item = PRODUCTS[key];
+                if (item.baseValue) {
+                    const fluctuation = (Math.random() - 0.5) * 0.5; // -25% to +25%
+                    const newPrice = Math.round(item.baseValue * (1 + fluctuation));
+                    gameState.marketPrices[key] = Math.max(1, newPrice);
+                }
+            });
+        }
+        
+        function gameLoop() {
+            let needsRender = false;
+            gameState.plots.forEach((plot) => {
+                if (plot && !plot.ready && plot.watered) {
+                    const timePassed = (Date.now() - plot.plantedTime) / 1000;
+                    const cropInfo = CROPS[plot.type];
+                    const timePerStage = cropInfo.growTime / cropInfo.stages.length;
+                    const newStage = Math.min(Math.floor(timePassed / timePerStage), cropInfo.stages.length - 1);
+                    if (newStage !== plot.stage) { plot.stage = newStage; needsRender = true; }
+                    if (timePassed >= cropInfo.growTime) { plot.ready = true; needsRender = true; }
+                }
+            });
+            if (needsRender) renderFarm();
+        }
+
+        function handleToolSelection(event) {
+            const tool = event.currentTarget.dataset.tool;
+            gameState.currentTool = tool;
+            if (tool === 'seed') { gameState.selectedSeed = event.currentTarget.dataset.key; }
+            if (tool === 'animal') { gameState.selectedAnimal = event.currentTarget.dataset.key; }
+            document.querySelectorAll('.tool-button').forEach(btn => btn.classList.remove('selected'));
+            event.currentTarget.classList.add('selected');
+        }
+
+        function handleViewSwitch(view) {
+            if (gameState.currentView !== view) {
+                gameState.currentView = view;
+                renderView();
+                saveGame();
+            }
+        }
+
+        function handlePlotClick(event) {
+            const index = parseInt(event.currentTarget.dataset.index, 10);
+            const plot = gameState.plots[index];
+
+            if (gameState.currentTool === 'water') {
+                if (plot && !plot.watered) { plot.watered = true; SOUNDS.water(); renderFarm(); }
+            } else if (gameState.currentTool === 'seed') {
+                 if (plot) {
+                    if (plot.ready) {
+                        const cropInfo = CROPS[plot.type];
+                        gameState.inventory[plot.type]++;
+                        gameState.plots[index] = null;
+                        updateStatus(`收穫了 ${cropInfo.name}!`, 'success'); SOUNDS.harvest();
+                        showFloatingText(cropInfo.icon, event.currentTarget);
+                    }
+                } else {
+                    const seedInfo = CROPS[gameState.selectedSeed];
+                    if (gameState.money >= seedInfo.cost) {
+                        gameState.money -= seedInfo.cost;
+                        gameState.plots[index] = { type: gameState.selectedSeed, plantedTime: Date.now(), stage: 0, ready: false, watered: true };
+                        updateStatus(`種下了 ${seedInfo.name}!`, 'info'); SOUNDS.plant();
+                    } else { updateStatus('錢不夠買種子!', 'error'); SOUNDS.error(); }
+                }
+            }
+            updateAllUI(); saveGame();
+        }
+        
+        function handleRanchPlotClick(event) {
+            if (gameState.currentTool !== 'animal') return;
+            const index = parseInt(event.currentTarget.dataset.index, 10);
+            if (!gameState.ranchPlots[index]) {
+                const animalInfo = ANIMALS[gameState.selectedAnimal];
+                if (gameState.money >= animalInfo.cost) {
+                    gameState.money -= animalInfo.cost;
+                    gameState.ranchPlots[index] = gameState.selectedAnimal;
+                    updateStatus(`買了一隻 ${animalInfo.name}!`, 'success'); SOUNDS.animal();
+                } else { updateStatus('錢不夠買動物!', 'error'); SOUNDS.error(); }
+            }
+            updateAllUI(); saveGame();
+        }
+
+        function handleSell(key) {
+            if (gameState.inventory[key] > 0) {
+                gameState.inventory[key]--;
+                const price = gameState.marketPrices[key];
+                gameState.money += price; SOUNDS.cash();
+                updateStatus(`賣掉 ${PRODUCTS[key].name} 賺了 $${price}!`, 'success');
+                updateAllUI(); saveGame();
+            }
+        }
+        
+        function updateAllUI() {
+            elements.moneyDisplay.textContent = gameState.money;
+            elements.dayDisplay.textContent = `☀️ 第 ${gameState.day} 天`;
+            renderFarm(); renderRanch(); renderInventory(); renderMarket();
+            renderView();
+        }
+
+        function renderView() {
+            const isFarmView = gameState.currentView === 'farm';
+            elements.farmGrid.classList.toggle('hidden', !isFarmView);
+            elements.ranchGrid.classList.toggle('hidden', isFarmView);
+            document.getElementById('view-farm-btn').classList.toggle('selected', isFarmView);
+            document.getElementById('view-ranch-btn').classList.toggle('selected', !isFarmView);
+        }
+
+        function renderFarm() {
+            gameState.plots.forEach((plot, i) => {
+                const el = elements.farmGrid.children[i];
+                const textEl = el.querySelector('.plot-text');
+                el.classList.remove('dry', 'wet', 'animate-pulse');
+                if (plot) {
+                    textEl.textContent = CROPS[plot.type].stages[plot.stage];
+                    el.classList.add(plot.watered ? 'wet' : 'dry');
+                    if (plot.ready) el.classList.add('animate-pulse');
+                } else { textEl.textContent = ''; }
+            });
+        }
+        function renderRanch() {
+            gameState.ranchPlots.forEach((animal, i) => {
+                const el = elements.ranchGrid.children[i];
+                const textEl = el.querySelector('.plot-text');
+                if(animal) { textEl.textContent = ANIMALS[animal].icon; }
+                else { textEl.textContent = ''; }
+            });
+        }
+        
+        function renderInventory() {
+            elements.inventoryDisplay.innerHTML = '';
+            PRODUCT_KEYS.forEach(key => {
+                if (gameState.inventory[key] > 0) {
+                    const item = document.createElement('div');
+                    item.className = 'bg-slate-800/50 p-2 rounded flex items-center justify-center text-center';
+                    item.innerHTML = `<span class="text-2xl">${PRODUCTS[key].icon}</span><span class="ml-2 font-bold text-xl">${gameState.inventory[key]}</span>`;
+                    elements.inventoryDisplay.appendChild(item);
+                }
+            });
+        }
+        
+        function renderMarket() {
+            elements.marketDisplay.innerHTML = '';
+            PRODUCT_KEYS.forEach(key => {
+                const item = PRODUCTS[key];
+                if (!item.baseValue) return; // Skip non-sellable items
+                const hasStock = gameState.inventory[key] > 0;
+                const price = gameState.marketPrices[key];
+                const priceDiff = price - item.baseValue;
+                let priceColor = 'text-yellow-300';
+                if (priceDiff > 0) priceColor = 'text-green-400';
+                if (priceDiff < 0) priceColor = 'text-red-400';
+                
+                const marketItem = document.createElement('div');
+                marketItem.className = 'flex items-center justify-between text-lg';
+                marketItem.innerHTML = `
+                    <span class="text-2xl">${item.icon}</span>
+                    <span class="${priceColor} font-bold">$${price}</span>
+                    <button class="px-3 py-1 bg-green-600 rounded hover:bg-green-500 disabled:bg-gray-500 disabled:cursor-not-allowed transition" 
+                        onclick="handleSell('${key}')" ${!hasStock ? 'disabled' : ''}>出售</button>`;
+                elements.marketDisplay.appendChild(marketItem);
+            });
+        }
+
+        let statusTimeout;
+        function updateStatus(message, type = 'info') {
+            clearTimeout(statusTimeout);
+            elements.statusMessage.textContent = message;
+            elements.character.classList.add('scale-110');
+            setTimeout(() => elements.character.classList.remove('scale-110'), 200);
+
+            const bubble = elements.statusMessage;
+            bubble.classList.remove('bg-lime-50', 'bg-yellow-100', 'bg-red-100', 'bg-green-100');
+            let color = '#f0fdf4';
+            if (type === 'error') { bubble.classList.add('bg-red-100'); color = '#fee2e2'; }
+            else if (type === 'warn') { bubble.classList.add('bg-yellow-100'); color = '#fef9c3'; }
+            else if (type === 'success') { bubble.classList.add('bg-green-100'); color = '#dcfce7'; }
+            else { bubble.classList.add('bg-lime-50'); }
+            bubble.style.setProperty('--bubble-tail-color', color);
+        }
+        
+        function showFloatingText(text, element) {
+            const el = document.createElement('div');
+            el.className = 'floating-text'; el.textContent = text;
+            (element.id === 'farm-grid' ? elements.farmGrid : elements.ranchGrid).appendChild(el);
+            const rect = element.getBoundingClientRect();
+            const gridRect = element.parentElement.getBoundingClientRect();
+            el.style.left = `${rect.left - gridRect.left + rect.width / 2 - el.offsetWidth / 2}px`;
+            el.style.top = `${rect.top - gridRect.top}px`;
+            setTimeout(() => el.remove(), 1500);
+        }
+
+        document.addEventListener('DOMContentLoaded', init);
+    </script>
+</body>
+</html>
+
